@@ -122,5 +122,7 @@ func main() {
 			log.Println("Error sending message:", err)
 			continue
 		}
+
+		fmt.Printf("\n%s: %s\n\n%s", peerColor("Peer"), string(decrypted), selfColor("You: "))
 	}
 }
