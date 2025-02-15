@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/chzyer/readline"
 	"github.com/fatih/color"
 )
 
@@ -59,18 +60,23 @@ func main() {
 	}
 	defer conn.Close()
 
-	// Prompt user for passphrase
-	fmt.Print("Enter passphrase: ")
-	reader := bufio.NewReader(os.Stdin)
-	passphrase, _ := reader.ReadString('\n')
+	// Prompt user for passphrase using readline
+	rl, err := readline.New("Enter passphrase: ")
+	if err != nil {
+		log.Fatal(err)
+	}
+	passphrase, err := rl.Readline()
+	if err != nil {
+		log.Fatal(err)
+	}
 	passphrase = strings.TrimSpace(passphrase)
-	key := deriveKey(passphrase)
+	rl.Close()
 
+	key := deriveKey(passphrase)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		log.Fatal(err)
@@ -80,11 +86,18 @@ func main() {
 	peerColor := color.New(color.FgGreen).SprintFunc()
 	selfColor := color.New(color.FgCyan).SprintFunc()
 
+	// Create a readline instance for chat input with prompt "You: "
+	chatRl, err := readline.New(selfColor("You: "))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer chatRl.Close()
+
 	// Goroutine to read and decrypt messages from server.
 	go func() {
-		serverReader := bufio.NewReader(conn)
+		r := bufio.NewReader(conn)
 		for {
-			line, err := serverReader.ReadString('\n')
+			line, err := r.ReadString('\n')
 			if err != nil {
 				log.Println("Error reading from server:", err)
 				os.Exit(1)
@@ -95,17 +108,21 @@ func main() {
 				log.Println("Error decrypting message:", err)
 				continue
 			}
-			fmt.Printf("%s: %s\n", peerColor("Peer"), string(decrypted))
+			// Use chatRl.Write() to output incoming message above the current prompt.
+			chatRl.Write([]byte(fmt.Sprintf("\r%s: %s\n", peerColor("Peer"), string(decrypted))))
+			// The prompt ("You: ") will be automatically re-displayed with the current input preserved.
 		}
 	}()
 
 	// Main loop: read user input, encrypt and send.
 	for {
-		fmt.Print(selfColor("You: "))
-		text, err := reader.ReadString('\n')
+		text, err := chatRl.Readline()
 		if err != nil {
-			log.Println("Error reading input:", err)
-			continue
+			// Handle interrupt (Ctrl+C) gracefully.
+			if err == readline.ErrInterrupt {
+				continue
+			}
+			break
 		}
 		text = strings.TrimSpace(text)
 		if text == "" {
@@ -116,13 +133,10 @@ func main() {
 			log.Println("Error encrypting message:", err)
 			continue
 		}
-		// Send the encrypted message (newline as delimiter)
 		_, err = conn.Write([]byte(encrypted + "\n"))
 		if err != nil {
 			log.Println("Error sending message:", err)
 			continue
 		}
-
-		fmt.Printf("\n%s: %s\n\n%s", peerColor("Peer"), string(decrypted), selfColor("You: "))
 	}
 }
