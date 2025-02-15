@@ -1,4 +1,4 @@
-Encrypted CLI Chat
+# Encrypted CLI Chat
 
 A secure, encrypted chat application written in Go that guarantees end-to-end encryption between two users. It runs in the command line with colored output to distinguish between your messages and your peer's messages.
 
